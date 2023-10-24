@@ -1,0 +1,11 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "command": "lovec .",
+            "problemMatcher": [],
+            "group": "build",
+            "label": "Love2D: Launch"
+        }
+    ]
+}
