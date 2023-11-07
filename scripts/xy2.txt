@@ -1,0 +1,1 @@
+plotxy cos(sqrt(x*x+y*y)) -6 6 -6 6 20 20

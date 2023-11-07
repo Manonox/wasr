@@ -23,7 +23,7 @@ function Renderer:render(camera, models)
         self.image:replacePixels(self.imageData)
         self.depthImage:replacePixels(self.depthImageData)
         love.graphics.draw(self.image)
-        love.graphics.draw(self.depthImage, 0, 0, 0, 0.25, 0.25)
+        --love.graphics.draw(self.depthImage, 0, 0, 0, 0.25, 0.25)
     love.graphics.setCanvas()
 end
 
@@ -58,7 +58,8 @@ end
 
 
 local p1, p2, p3
-local color1, color2, color3
+local n1, n2, n3
+local c1, c2, c3
 local uv1, uv2, uv3
 
 local x1, x2, x3
@@ -68,14 +69,15 @@ local minX, minY, maxX, maxY
 local min, max, floor = math.min, math.max, math.floor
 
 local w1, w2, w3
-local position, color, uv = Vector3(0, 0, 0), Vector3(0, 0, 0), Vector2(0, 0)
+local position, normal, color, uv = Vector3(0, 0, 0), Vector3(0, 0, 0), Vector2(0, 0)
 local depth, currentDepth
 local setPixel, getPixel
 
 local function triangle(imageData, depthImageData, v1, v2, v3, w, h)
     p1, p2, p3 = v1[1], v2[1], v3[1]
-    c1, c2, c3  = v1[2], v2[2], v3[2]
-    uv1, uv2, uv3 = v1[3], v2[3], v3[3]
+    n1, n2, n3  = v1[2], v2[2], v3[2]
+    c1, c2, c3  = v1[3], v2[3], v3[3]
+    uv1, uv2, uv3 = v1[4], v2[4], v3[4]
 
     x1, x2, x3 = p1[1], p2[1], p3[1]
     y1, y2, y3 = p1[2], p2[2], p3[2]
@@ -107,6 +109,7 @@ local function triangle(imageData, depthImageData, v1, v2, v3, w, h)
                 currentDepth = getPixel(depthImageData, x, y)
         
                 if depth >= 0 and depth <= 1 and depth <= currentDepth then
+                    
                     -- for i=1, 2 do
                     --     position[i] = w1 * p1[i] + w2 * p2[i] + w3 * p3[i]
                     -- end
@@ -141,8 +144,6 @@ function Renderer:_drawFace()
     local v1, v2, v3 = facevertices[1], facevertices[2], facevertices[3]
     local p1, p2, p3 = v1[1], v2[1], v3[1]
     if p1[3] < -1 and p2[3] < -1 and p3[3] < -1 then return end -- cull faces which are completely behind the camera
-    -- FUCK FUCK FUCK FUCK
-    -- https://www.scratchapixel.com/lessons/3d-basic-rendering/perspective-and-orthographic-projection-matrix/projection-matrix-GPU-rendering-pipeline-clipping.html
 
     local resolution = self.resolution
     for i=1, 2 do
@@ -191,7 +192,7 @@ function Renderer:_render(camera, models)
             local normal = mgl.cross(a, b)
             local cameraToTriangle = vertexPositions[1] - cameraPosition
             local dot = mgl.dot(normal, cameraToTriangle)
-            --if dot <= 0 then goto skip end
+            if dot <= 0 then goto skip end
             
             -- Clipping
             -- for i=1, 3 do
@@ -206,6 +207,7 @@ function Renderer:_render(camera, models)
 
             for i=1, 3 do
                 local clipSpacePosition = vertexClipSpacePositions[i]
+                if clipSpacePosition[4] < 0 then goto skip end -- cull faces which have a very annoying vertex
                 local position = clipSpacePosition / clipSpacePosition[4]
                 facevertices[i][1] = position
             end

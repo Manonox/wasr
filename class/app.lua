@@ -1,5 +1,7 @@
 local App = class("App")
 
+local geometry = require("geometry")
+local Console = require("console")
 
 local ObjParser = require("obj_parser")
 local Model = require("model")
@@ -9,8 +11,12 @@ local Renderer = require("renderer")
 
 function App.static:run(...)
     love.graphics.setDefaultFilter("nearest", "nearest")
+    love.keyboard.setKeyRepeat(true)
 
     local w, h = love.graphics.getDimensions()
+
+    self.console = Console()
+    self:setupConsole()
 
     self.camera = Camera(Vector3(-8, 0, 8), Vector3(0, 0, 0), { aspect = w / h })
     self.camera.transform:lookAt(Vector3(0, 0, 0))
@@ -28,14 +34,14 @@ function App.static:run(...)
     -- }
 
     local vertices = {
-        { Vector3(-1, -1, -1), Vector3(0, 0, 0) },
-        { Vector3( 1, -1, -1), Vector3(1, 0, 0) },
-        { Vector3(-1,  1, -1), Vector3(0, 1, 0) },
-        { Vector3( 1,  1, -1), Vector3(1, 1, 0) },
-        { Vector3(-1, -1,  1), Vector3(0, 0, 1) },
-        { Vector3( 1, -1,  1), Vector3(1, 0, 1) },
-        { Vector3(-1,  1,  1), Vector3(0, 1, 1) },
-        { Vector3( 1,  1,  1), Vector3(1, 1, 1) },
+        { Vector3(-1, -1, -1), Vector3(0, 0, 0), Vector3(0, 0, 0) },
+        { Vector3( 1, -1, -1), Vector3(0, 0, 0), Vector3(1, 0, 0) },
+        { Vector3(-1,  1, -1), Vector3(0, 0, 0), Vector3(0, 1, 0) },
+        { Vector3( 1,  1, -1), Vector3(0, 0, 0), Vector3(1, 1, 0) },
+        { Vector3(-1, -1,  1), Vector3(0, 0, 0), Vector3(0, 0, 1) },
+        { Vector3( 1, -1,  1), Vector3(0, 0, 0), Vector3(1, 0, 1) },
+        { Vector3(-1,  1,  1), Vector3(0, 0, 0), Vector3(0, 1, 1) },
+        { Vector3( 1,  1,  1), Vector3(0, 0, 0), Vector3(1, 1, 1) },
     }
 
     local faces = {
@@ -56,6 +62,8 @@ function App.static:run(...)
     love.draw:add(bind(self.draw, self))
     love.update:add(bind(self.update, self))
     love.filedropped:add(bind(self.filedropped, self))
+
+    love.keypressed:add(bind(self.keypressed, self))
 end
 
 
@@ -69,13 +77,15 @@ function App.static:draw()
 end
 
 function App.static:update(dt)
+    self:moveCamera(dt)
     dtSamples[dtSampleIndex] = dt
     dtSampleIndex = dtSampleIndex % 10 + 1
+
+
     local t = love.timer.getTime() * 2
     --self.camera.transform.position = Vector3(math.cos(t) * 4, -math.sin(t) * 4, math.sin(t / 1.713) * 2)
     --self.camera.transform.position = Vector3(-4, 4, 3 + math.sin(t) * 2)
-    self:moveCamera(dt)
-    self.model.transform.position = Vector3(0, 0, 0) -- math.sin(t * 0.8) * 0.5
+    --self.model.transform.position = Vector3(0, 0, 0) -- math.sin(t * 0.8) * 0.5
     --self.model.transform.rotation = Vector3(0, 0, t * 0.5)
 end
 
@@ -83,6 +93,7 @@ local function isDownInt(k)
     return love.keyboard.isDown(k) and 1 or 0
 end
 function App.static:moveCamera(dt)
+    if self.console.active then return end
     local transform = self.camera.transform
     local w, a, s, d = isDownInt("w"), isDownInt("a"), isDownInt("s"), isDownInt("d")
     local i, j, k, l = isDownInt("i"), isDownInt("j"), isDownInt("k"), isDownInt("l")
@@ -119,8 +130,16 @@ function App.static:drawFPSCounter()
     love.graphics.print("FPS: " .. math.floor(1 / dt))
 end
 
+
 function App.static:drawConsole()
-    
+    self.console:draw()
+end
+
+function App.static:keypressed(key, _, echo)
+    if echo then return end
+    if key == "`" then
+        self.console.active = not self.console.active
+    end
 end
 
 
@@ -130,6 +149,7 @@ function App.static:initializeCanvas(w, h)
     self.resolution = Vector2(w, h)
     self.canvas = love.graphics.newCanvas(w, h)
     self.renderer = Renderer(self.canvas)
+    self.renderer.clearColor = Vector3(0.05, 0.07, 0.1)
     self.camera.aspect = w / h
 end
 
@@ -140,6 +160,173 @@ function App.static:filedropped(f)
     local _, model = next(models)
     if model then
         self.model = model
+    end
+end
+
+
+
+App.static.consoleCommands = {
+    exec = function(self, args)
+        local path = "scripts/" .. args[1]
+        if not love.filesystem.getInfo(path, "file") then
+            self.console:push("couldn't find file '" .. fname .. "'")
+            return
+        end
+        
+        local data = love.filesystem.read(path)
+        for _, line in string.lines(data) do
+            self.console:run(line)
+        end
+    end,
+
+    move = function(self, args)
+        local x,y,z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
+        if not x or not y or not z then
+            self.console:push("invalid arguments, expected x,y,z components")
+            return
+        end
+
+        local position = self.model.transform.position
+        position[1] = position[1] + x
+        position[2] = position[2] + y
+        position[3] = position[3] + z
+    end,
+
+    rotate = function(self, args)
+        local x,y,z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
+        if not x or not y or not z then
+            self.console:push("invalid arguments, expected x,y,z components")
+            return
+        end
+
+        local rotation = self.model.transform.rotation
+        rotation[1] = rotation[1] + math.rad(x)
+        rotation[2] = rotation[2] + math.rad(y)
+        rotation[3] = rotation[3] + math.rad(z)
+    end,
+
+    scale = function(self, args)
+        local x,y,z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
+        if not x then
+            self.console:push("invalid arguments, expected x,y,z components")
+            return
+        end
+        
+        if not y or not z then y, z = x, x end
+
+        local scale = self.model.transform.scale
+        scale[1] = scale[1] * x
+        scale[2] = scale[2] * y
+        scale[3] = scale[3] * z
+    end,
+
+    flip = function(self, args)
+        local planeLookup = {yz=1,xz=2,xy=3}
+        local axis = planeLookup[args[1] or ""]
+        if not axis then
+            self.console:push("invalid argument #1, expected yz/xz/xy")
+            return
+        end
+        
+        local scale = self.model.transform.scale
+        scale[axis] = -scale[axis]
+    end,
+
+    solid_of_revolution = function(self, args)
+        if not args[1] then
+            self.console:push("invalid argument #1, expected function taking x (f.e. \"sin(x)\")")
+            return
+        end
+
+        local func = loadstring("return (" .. args[1] .. ")")
+        if not func then
+            self.console:push("invalid argument #1, expected function taking x (f.e. \"sin(x)\")")
+            return
+        end
+
+        local env = {}
+        setmetatable(env, {__index = math})
+        setfenv(func, env)
+        local sampler = function(x)
+            env.x = x
+            return func()
+        end
+
+        local minX, maxX = tonumber(args[2]), tonumber(args[3])
+        if not minX or not maxX then
+            self.console:push("invalid argument #2/#3, expected bounds (min X and max X)")
+            return
+        end
+
+        local resolutionX, resolutionY = tonumber(args[4]), tonumber(args[5])
+        if not resolutionX or not resolutionY then
+            self.console:push("invalid argument #4/#5, expected solid's resolution (segment count along X and along axis of rotation)")
+            return
+        end
+
+        
+        local capped = args[6] == "capped"
+        self.model = geometry.buildSoR(sampler, minX, maxX, resolutionX, resolutionY, capped)
+    end,
+
+    plotxy = function(self, args)
+        if not args[1] then
+            self.console:push("invalid argument #1, expected function taking x and y (f.e. \"sin(x) + cos(y)\")")
+            return
+        end
+
+        local func = loadstring("return (" .. args[1] .. ")")
+        if not func then
+            self.console:push("invalid argument #1, expected function taking x and y (f.e. \"sin(x) + cos(y)\")")
+            return
+        end
+
+        local env = {}
+        setmetatable(env, {__index = math})
+        setfenv(func, env)
+        local sampler = function(x, y)
+            env.x, env.y = x, y
+            return func()
+        end
+
+        local minX, maxX = tonumber(args[2]), tonumber(args[3])
+        if not minX or not maxX then
+            self.console:push("invalid argument #2/#3, expected bounds for X")
+            return
+        end
+
+        local minY, maxY = tonumber(args[4]), tonumber(args[5])
+        if not minX or not maxX then
+            self.console:push("invalid argument #4/#5, expected bounds for Y")
+            return
+        end
+
+        local resolutionX, resolutionY = tonumber(args[6]), tonumber(args[7])
+        if not resolutionX or not resolutionY then
+            self.console:push("invalid argument #6/#7, expected XY resolution (segment count along X and along Y)")
+            return
+        end
+
+        self.model = geometry.buildPlotXY(sampler, Vector2(minX, minY), Vector2(maxX, maxY), Vector2(resolutionX, resolutionY))
+    end,
+
+
+    export = function(self, args)
+        local path = args[1]
+        if not path then
+            self.console:push("invalid argument #1, expected path")
+            return
+        end
+
+        self.model:export(path)
+    end,
+}
+
+function App.static:setupConsole()
+    local console = self.console
+
+    for k, v in pairs(self.consoleCommands) do
+        console:addCommand(k, bind(v, self))
     end
 end
 

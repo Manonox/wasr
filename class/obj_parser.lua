@@ -110,7 +110,7 @@ function ObjParser:normalizeModel()
     for i, v in ipairs(self.v) do
         local n = vn[i]
         local lightness = n and ((mgl.dot(n, sun) * 0.5 + 0.5) * 0.9 + 0.1) or math.random()
-        vertices[#vertices + 1] = { v, Vector3(lightness, lightness, lightness) }
+        vertices[#vertices + 1] = { v, n or Vector3(0, 0, 0), Vector3(lightness, lightness, lightness) }
     end
 
     for _, f in ipairs(self.f) do

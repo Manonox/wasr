@@ -1,0 +1,1 @@
+plotxy cos(x)+cos(y) -6 6 -6 6 20 20
