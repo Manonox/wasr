@@ -9,6 +9,7 @@ local Camera = require("camera")
 local Renderer = require("renderer")
 
 
+local w, h = love.graphics.getDimensions()
 function App.static:run(...)
     love.graphics.setDefaultFilter("nearest", "nearest")
     love.keyboard.setKeyRepeat(true)
@@ -72,6 +73,7 @@ local dtSampleIndex = 1
 function App.static:draw()
     self:render()
     self:blitCanvas()
+
     self:drawFPSCounter()
     self:drawConsole()
 end
@@ -94,7 +96,9 @@ local function isDownInt(k)
 end
 function App.static:moveCamera(dt)
     if self.console.active then return end
-    local transform = self.camera.transform
+    local camera = self.horizon_mode and self.horizon_camera or self.camera
+
+    local transform = camera.transform
     local w, a, s, d = isDownInt("w"), isDownInt("a"), isDownInt("s"), isDownInt("d")
     local i, j, k, l = isDownInt("i"), isDownInt("j"), isDownInt("k"), isDownInt("l")
     local space, ctrl = isDownInt("space"), isDownInt("lctrl")
@@ -112,11 +116,23 @@ end
 
 
 function App.static:render()
+    if self.horizon_mode then
+        self:renderHorizonMode()
+        return
+    end
+
     self.renderer:render(self.camera, { self.model })
 end
 
+local horizon_image = love.graphics.newImage(love.image.newImageData(w, h))
 function App.static:blitCanvas()
     local w, h = love.graphics.getDimensions()
+    if self.horizon_mode then
+        horizon_image:replacePixels(self.horizon_imagedata)
+        love.graphics.draw(horizon_image, 0, 0)
+        return
+    end
+
     love.graphics.draw(self.canvas, 0, 0, 0, w / self.resolution[1], h / self.resolution[2])
 end
 
@@ -155,19 +171,71 @@ end
 
 
 function App.static:filedropped(f)
-    local s = f:read()
-    local models = ObjParser(s):parse()
-    local _, model = next(models)
-    if model then
-        self.model = model
+    local fname = f:getFilename()
+
+    if fname:find("obj") then
+        local s = f:read()
+        local models = ObjParser(s):parse()
+        local _, model = next(models)
+        if model then
+            self.model = model
+        end
+    end
+
+    if fname:find("png") or fname:find("jpg") then
+		local data = f:read("data")
+		local imageData = love.image.newImageData(data)
+        self.model.texture = imageData
     end
 end
 
 
+local function applyMatrix(point, matrix)
+    return matrix * Vector4(point, 1)
+end
+
+local math_floor = math.floor
+function App.static:renderHorizonMode()
+    love.graphics.setColor(1, 1, 1)
+    self.horizon_imagedata:mapPixel(function() return 0, 0, 0, 1 end)
+    local w, h = love.graphics.getDimensions()
+    local bufferX, bufferY = {}, {}
+    for i=0, w do bufferY[i] = h end
+
+    local camera = self.horizon_camera
+    local sampler = self.horizon_sampler
+
+    local viewMatrix = camera:getViewMatrix()
+    local transformedSampler = function(x, y)
+        local z = sampler(x, y)
+        local v = Vector3(x, y, z)
+        v = applyMatrix(v, viewMatrix)
+        v = v / v[4]
+
+        v[1] = (v[1] + 1) / 2 * w
+        v[2] = (v[2] + 1) / 2 * h
+
+        return math_floor(v[1]), math_floor(v[2])
+    end
+
+    for y=6, -6, -0.1 do
+        for x=-6, 6, 0.01 do
+            local tx, ty = transformedSampler(x, y)
+            if tx >= 0 and ty >= 0 and tx < w and ty < h then
+                local by = bufferY[tx]
+                if ty < by then
+                    bufferY[tx] = ty
+                    self.horizon_imagedata:setPixel(tx, ty, 1, 1, 1, 1)
+                end
+            end
+        end
+    end
+end
+
 
 App.static.consoleCommands = {
     exec = function(self, args)
-        local path = "scripts/" .. args[1]
+        local path = "scripts/" .. args[1] .. ".txt"
         if not love.filesystem.getInfo(path, "file") then
             self.console:push("couldn't find file '" .. fname .. "'")
             return
@@ -320,7 +388,43 @@ App.static.consoleCommands = {
 
         self.model:export(path)
     end,
+
+
+    horizon = function(self, args)
+        self.horizon_mode = not self.horizon_mode
+
+        if not self.horizon_mode then return end
+
+        if not args[1] then
+            self.console:push("invalid argument #1, expected function taking x and y")
+            self.horizon_mode = false
+            return
+        end
+
+        local func = loadstring("return (" .. args[1] .. ")")
+        if not func then
+            self.console:push("invalid argument #1, expected function taking x and y")
+            self.horizon_mode = false
+            return
+        end
+
+        local env = {}
+        setmetatable(env, {__index = math})
+        setfenv(func, env)
+        local sampler = function(x, y)
+            env.x, env.y = x, y
+            return func()
+        end
+
+        local size = args[2] and tonumber(args[2]) or 4
+
+        self.horizon_sampler = sampler
+        self.horizon_imagedata = love.image.newImageData(w, h)
+        self.horizon_camera = Camera(Vector3(8, 8, 8), Vector3(0, 0, 0), { aspect = self.camera.aspect, ortho = true, orthoSize = size })
+        self.horizon_camera.transform:lookAt(Vector3(0, 0, 0))
+    end,
 }
+
 
 function App.static:setupConsole()
     local console = self.console
