@@ -39,12 +39,12 @@ function App.static:run(...)
     }
 
     local faces = {
-        { 1, 2, 4 }, { 1, 4, 3 }, -- bottom
-        { 5, 8, 6 }, { 5, 7, 8 }, -- top
-        { 1, 3, 7 }, { 1, 7, 5 }, -- back
-        { 2, 8, 4 }, { 2, 6, 8 }, -- front
-        { 1, 6, 2 }, { 1, 5, 6 }, -- left
-        { 3, 4, 8 }, { 3, 8, 7 }, -- right
+        { 1, 4, 2 }, { 1, 3, 4 }, -- bottom
+        { 5, 6, 8 }, { 5, 8, 7 }, -- top
+        { 1, 7, 3 }, { 1, 5, 7 }, -- back
+        { 2, 4, 8 }, { 2, 8, 6 }, -- front
+        { 1, 2, 6 }, { 1, 6, 5 }, -- left
+        { 3, 8, 4 }, { 3, 7, 8 }, -- right
     }
 
 
@@ -76,7 +76,7 @@ function App.static:update(dt)
     --self.camera.transform.position = Vector3(-4, 4, 3 + math.sin(t) * 2)
     self:moveCamera(dt)
     self.model.transform.position = Vector3(0, 0, 0) -- math.sin(t * 0.8) * 0.5
-    self.model.transform.rotation = Vector3(0, 0, 0) -- t * 0.3
+    --self.model.transform.rotation = Vector3(0, 0, t * 0.5)
 end
 
 local function isDownInt(k)

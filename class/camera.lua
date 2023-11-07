@@ -11,18 +11,29 @@ function Camera:initialize(position, rotation, settings)
     self.zfar = settings.zfar or 100
     self.aspect = settings.aspect or 1
     self.ortho = settings.ortho or false
+    self.orthoSize = settings.orthoSize or 2
 end
 
 
 function Camera:getProjectionMatrix()
-    assert(not self.ortho)
+    local f, n = self.zfar, self.znear
+    local fsubn = f - n
+
+    if self.ortho then
+        local h = self.orthoSize
+        local w = h * self.aspect
+        local l, r, t, b = -w, w, -h, h
+        return Matrix4({
+            0, 1 / w, 0, -(r+l)/(r-l),
+            0, 0, -1 / h, (t+b)/(t-b),
+            -2/fsubn, 0, 0, (f+n)/fsubn,
+            0, 0, 0, 1
+        })
+    end
 
     -- local up = Transform.up
     -- local forward = Transform.forward
     -- local right = Transform.right
-
-    local f, n = self.zfar, self.znear
-    local fsubn = f - n
 
     local sy = 1 / math.tan(self.fov / 2 * math.pi / 180)
     local sx = sy / self.aspect

@@ -56,83 +56,80 @@ local function lerpTriangle(rp, gp, bp, x, y)
 end
 
 
-local min, max, clamp, floor = math.min, math.max, math.clamp, math.floor
-local clamp_bi = function(x, a, b) if a > b then a, b = b, a end return min(max(x, a), b) end
-local function triangle(imageData, depthImageData, v1, v2, v3, w, h, sampler)
-    -- replace with https://erkaman.github.io/posts/fast_triangle_rasterization.html
-    -- damn: https://www.youtube.com/watch?v=k5wtuKWmV48
 
+local p1, p2, p3
+local color1, color2, color3
+local uv1, uv2, uv3
 
-    local p1, p2, p3 = v1[1], v2[1], v3[1]
+local x1, x2, x3
+local y1, y2, y3
 
-    local color1, color2, color3 = v1[2], v2[2], v3[2]
-    local uv1, uv2, uv3 = v1[3], v2[3], v3[3]
+local minX, minY, maxX, maxY
+local min, max, floor = math.min, math.max, math.floor
 
-    local up1, up2, up3 = p1, p2, p3
-    if p1.y > p2.y then p1, p2 = p2, p1 end
-    if p2.y > p3.y then p2, p3 = p3, p2 end
-    if p1.y > p2.y then p1, p2 = p2, p1 end
+local w1, w2, w3
+local position, color, uv = Vector3(0, 0, 0), Vector3(0, 0, 0), Vector2(0, 0)
+local depth, currentDepth
+local setPixel, getPixel
 
+local function triangle(imageData, depthImageData, v1, v2, v3, w, h)
+    p1, p2, p3 = v1[1], v2[1], v3[1]
+    c1, c2, c3  = v1[2], v2[2], v3[2]
+    uv1, uv2, uv3 = v1[3], v2[3], v3[3]
 
-    local yStart = floor(p1[2] + 0.5)
-    local yMid = floor(p2[2] + 0.5)
-    local yEnd = floor(p3[2] + 0.5)
-    local slope1 = (p2[2] - p1[2]) / (p2[1] - p1[1])
-    local slope2 = (p3[2] - p1[2]) / (p3[1] - p1[1])
-    local slope3 = (p3[2] - p2[2]) / (p3[1] - p2[1])
+    x1, x2, x3 = p1[1], p2[1], p3[1]
+    y1, y2, y3 = p1[2], p2[2], p3[2]
 
-    local p1x, p2x, p3x = p1[1], p2[1], p3[1]
-    local xEdge1, xEdge2
+    -- calculate the bounding box of the triangle
+    minX, minY = min(x1, x2, x3), min(y1, y2, y3)
+    maxX, maxY = max(x1, x2, x3), max(y1, y2, y3)
 
-    local m1, m2, m3
-    local depth, currentDepth
-    local position = Vector3(0, 0, 0)
-    local color = Vector3(0, 0, 0)
-    local uv = Vector2(0, 0)
+    minX, minY = max(minX, 0), max(minY, 0)
+    maxX, maxY = min(maxX, w), min(maxY, h)
 
-    local setPixel = imageData.setPixel
-    local getPixel = imageData.getPixel
+    minX, minY = floor(minX), floor(minY)
+    maxX, maxY = floor(maxX), floor(maxY)
 
-    for y=max(yStart, 0), min(yEnd, h) do
-        if y < yMid then
-            xEdge1 = (y - yStart) / slope1 + p1x
-        else
-            xEdge1 = (y - yMid) / slope3 + p2x
-        end
+    setPixel, getPixel = imageData.setPixel, imageData.getPixel
 
-        xEdge2 = (y - yStart) / slope2 + p1x
-        if xEdge1 > xEdge2 then
-            xEdge1, xEdge2 = xEdge2, xEdge1
-        end
-
-        xEdge1, xEdge2 = floor(xEdge1 + 0.5), floor(xEdge2 + 0.5)
-
-        for x=max(xEdge1, 0), min(xEdge2, w) do
-            m1, m2, m3 = lerpTriangle(up1, up2, up3, x, y)
-            for i=1, 3 do
-                position[i] = m1 * up1[i] + m2 * up2[i] + m3 * up3[i]
-            end
-            depth = position[3]
-            currentDepth = getPixel(depthImageData, x, y)
-            if depth >= 0 and depth <= 1 and depth <= currentDepth then
-                for i=1, 3 do
-                    color[i] = m1 * color1[i] + m2 * color2[i] + m3 * color3[i]
+    -- iterate over the bounding box
+    for y = minY, maxY do
+        for x = minX, maxX do
+            -- calculate barycentric coordinates
+            w1 = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / ((y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3))
+            w2 = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / ((y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3))
+            w3 = 1 - w1 - w2
+        
+            -- if the point is inside the triangle, draw it
+            if w1 >= 0 and w2 >= 0 and w3 >= 0 then
+                position[3] = w1 * p1[3] + w2 * p2[3] + w3 * p3[3]
+                depth = position[3]
+                currentDepth = getPixel(depthImageData, x, y)
+        
+                if depth >= 0 and depth <= 1 and depth <= currentDepth then
+                    -- for i=1, 2 do
+                    --     position[i] = w1 * p1[i] + w2 * p2[i] + w3 * p3[i]
+                    -- end
+        
+                    for i=1, 3 do
+                        color[i] = w1 * c1[i] + w2 * c2[i] + w3 * c3[i]
+                    end
+        
+                    -- for i=1, 2 do
+                    --     uv[i] = w1 * uv1[i] + w2 * uv2[i] + w3 * uv3[i]
+                    -- end
+        
+                    setPixel(imageData, x, y, color[1], color[2], color[3], 1)
+                    setPixel(depthImageData, x, y, depth, 0, 0, 1)
                 end
-
-                for i=1, 2 do
-                    uv[i] = m1 * uv1[i] + m2 * uv2[i] + m3 * uv3[i]
-                end
-
-                setPixel(imageData, x, y, color[1], color[2], color[3], 1)
-                setPixel(depthImageData, x, y, depth, 0, 0, 1)
             end
         end
     end
 end
 
 
-local function applyMatrix(point, viewMatrix)
-    return viewMatrix * Vector4(point, 1)
+local function applyMatrix(point, matrix)
+    return matrix * Vector4(point, 1)
 end
 
 
@@ -181,7 +178,7 @@ function Renderer:_render(camera, models)
             for i, vertexIndex in ipairs(face) do
                 local vertexdata = vertices[vertexIndex]
                 local position = vertexdata[1]
-                vertexPositions[i] = position
+                vertexPositions[i] = Vector3(applyMatrix(position, modelMatrix))
                 local clipSpacePosition = applyMatrix(position, clipSpaceMatrix)
                 vertexClipSpacePositions[i] = clipSpacePosition
                 local vertex = facevertices[i]
@@ -194,7 +191,7 @@ function Renderer:_render(camera, models)
             local normal = mgl.cross(a, b)
             local cameraToTriangle = vertexPositions[1] - cameraPosition
             local dot = mgl.dot(normal, cameraToTriangle)
-            -- if dot <= 0 then goto skip end
+            --if dot <= 0 then goto skip end
             
             -- Clipping
             -- for i=1, 3 do
@@ -209,7 +206,8 @@ function Renderer:_render(camera, models)
 
             for i=1, 3 do
                 local clipSpacePosition = vertexClipSpacePositions[i]
-                facevertices[i][1] = clipSpacePosition / clipSpacePosition[4]
+                local position = clipSpacePosition / clipSpacePosition[4]
+                facevertices[i][1] = position
             end
 
             self:_drawFace()
