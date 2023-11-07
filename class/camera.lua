@@ -26,7 +26,7 @@ function Camera:getProjectionMatrix()
         return Matrix4({
             0, 1 / w, 0, -(r+l)/(r-l),
             0, 0, -1 / h, (t+b)/(t-b),
-            -2/fsubn, 0, 0, (f+n)/fsubn,
+            2/fsubn, 0, 0, -(f+n)/fsubn,
             0, 0, 0, 1
         })
     end

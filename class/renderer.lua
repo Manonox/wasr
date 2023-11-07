@@ -69,8 +69,10 @@ local minX, minY, maxX, maxY
 local min, max, floor = math.min, math.max, math.floor
 
 local w1, w2, w3
-local position, normal, color, uv = Vector3(0, 0, 0), Vector3(0, 0, 0), Vector2(0, 0)
+local position, normal, vertexColor, uv = Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(1, 1, 1), Vector2(0, 0)
 local depth, currentDepth
+local texture, textureWidth, textureHeight
+local textureColor, finalColor = Vector3(0, 0, 0), Vector3(0, 0, 0)
 local setPixel, getPixel
 
 local function triangle(imageData, depthImageData, v1, v2, v3, w, h)
@@ -115,14 +117,27 @@ local function triangle(imageData, depthImageData, v1, v2, v3, w, h)
                     -- end
         
                     for i=1, 3 do
-                        color[i] = w1 * c1[i] + w2 * c2[i] + w3 * c3[i]
+                        vertexColor[i] = w1 * c1[i] + w2 * c2[i] + w3 * c3[i]
+                    end
+                    
+                    if texture and uv1 and uv2 and uv3 then
+                        for i=1, 2 do
+                            uv[i] = w1 * uv1[i] + w2 * uv2[i] + w3 * uv3[i]
+                        end
+
+                        uv[1] = (uv[1] % 1) * textureWidth
+                        uv[2] = (uv[2] % 1) * textureHeight
+
+                        textureColor[1], textureColor[2], textureColor[3] = getPixel(texture, uv[1], uv[2])
+                    else
+                        textureColor[1], textureColor[2], textureColor[3] = 1, 1, 1
+                    end
+                    
+                    for i=1, 3 do
+                        finalColor[i] = textureColor[i] * vertexColor[i]
                     end
         
-                    -- for i=1, 2 do
-                    --     uv[i] = w1 * uv1[i] + w2 * uv2[i] + w3 * uv3[i]
-                    -- end
-        
-                    setPixel(imageData, x, y, color[1], color[2], color[3], 1)
+                    setPixel(imageData, x, y, finalColor[1], finalColor[2], finalColor[3], 1)
                     setPixel(depthImageData, x, y, depth, 0, 0, 1)
                 end
             end
@@ -138,8 +153,6 @@ end
 
 local facevertices = { { }, { }, { } }
 
-
-local function samplerWhite() return Vector3(1, 1, 1) end
 function Renderer:_drawFace()
     local v1, v2, v3 = facevertices[1], facevertices[2], facevertices[3]
     local p1, p2, p3 = v1[1], v2[1], v3[1]
@@ -155,7 +168,7 @@ function Renderer:_drawFace()
     p1[2] = resolution[2] - p1[2]
     p2[2] = resolution[2] - p2[2]
     p3[2] = resolution[2] - p3[2]
-    triangle(self.imageData, self.depthImageData, v1, v2, v3, resolution[1] - 1, resolution[2] - 1, samplerWhite)
+    triangle(self.imageData, self.depthImageData, v1, v2, v3, resolution[1] - 1, resolution[2] - 1)
 end
 
 
@@ -163,6 +176,7 @@ local vertexPositions = {}
 local vertexClipSpacePositions = {}
 local vertexclipping = {}
 local vector00 = Vector2(0, 0)
+local vector000 = Vector3(0, 0, 0)
 local vector111 = Vector3(1, 1, 1)
 function Renderer:_render(camera, models)
     self:_clear()
@@ -174,6 +188,10 @@ function Renderer:_render(camera, models)
     for _, model in ipairs(models) do
         local modelMatrix = model.transform:getMatrix()
         local vertices = model.vertices
+        texture = model.texture
+        if texture then
+            textureWidth, textureHeight = texture:getWidth(), texture:getHeight()
+        end
         local clipSpaceMatrix = viewMatrix * modelMatrix
         for _, face in ipairs(model.faces) do
             for i, vertexIndex in ipairs(face) do
@@ -183,8 +201,9 @@ function Renderer:_render(camera, models)
                 local clipSpacePosition = applyMatrix(position, clipSpaceMatrix)
                 vertexClipSpacePositions[i] = clipSpacePosition
                 local vertex = facevertices[i]
-                vertex[2] = vertexdata[2] or vector111
-                vertex[3] = vertexdata[3] or vector00
+                vertex[2] = vertexdata[2] or vector000
+                vertex[3] = vertexdata[3] or vector111
+                vertex[4] = vertexdata[4] or vector00
             end
             
             -- Back-face Culling

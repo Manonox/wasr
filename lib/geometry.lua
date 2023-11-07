@@ -44,7 +44,7 @@ function geometry.buildSoR(sampler, minX, maxX, resolutionX, resolutionY, capped
             end
             normal = mgl.normalize(normal)
 
-            verts[#verts + 1] = {position, normal, Vector3(1, 1, 1)}
+            verts[#verts + 1] = {position, normal, Vector3(1, 1, 1), Vector2((p[1] - minX) / (maxX - minX), rot / 360)}
         end
         rot = rot + yStep
     end
@@ -75,10 +75,14 @@ function geometry.buildPlotXY(sampler, min, max, resolution)
     local maxI = resolution[1] + 1
     local maxJ = resolution[2] + 1
 
+    local u, v = 0, 0
+    local uvStep = Vector2(1, 1) / resolution
+
     local x, y = min[1], min[2]
     local verts = {}
     for j = 1, maxJ do
         x = min[1]
+        u = 0
         for i = 1, maxI do
             local z = sampler(x, y)
             local position = Vector3(x, y, z)
@@ -87,11 +91,13 @@ function geometry.buildPlotXY(sampler, min, max, resolution)
             local normal = Vector3(dx, dy, 1 - math.sqrt(dx * dx + dy * dy))
             normal = mgl.normalize(normal)
 
-            verts[#verts + 1] = {position, normal, Vector3(1, 1, 1)}
+            verts[#verts + 1] = {position, normal, Vector3(1, 1, 1), Vector2(u, v)}
 
             x = x + step[1]
+            u = u + uvStep[1]
         end
         y = y + step[2]
+        v = v + uvStep[2]
     end
 
     local faces = {}

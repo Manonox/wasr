@@ -8,6 +8,7 @@ function Model:initialize(position, rotation, scale, vertices, faces)
     self.transform = Transform(position, rotation, scale)
     self.vertices = vertices
     self.faces = faces
+    self.texture = nil
 end
 
 
